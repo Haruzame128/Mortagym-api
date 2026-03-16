@@ -9,6 +9,9 @@ pnpm-debug.log*
 .env
 .env.*
 
+# Uploads — imágenes del servidor, no van al repo
+uploads/
+
 # Logs
 logs/
 *.log
@@ -43,4 +46,3 @@ desktop.ini
 # Misc
 .secret
 .cache/
-
