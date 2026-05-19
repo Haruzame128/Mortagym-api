@@ -44,23 +44,57 @@ export default async function clientesRoutes(app) {
 
   // POST /api/admin/clientes — crea Usuario + Cliente en transacción
   // crea un nuevo cliente con su usuario asociado, ambos activos por defecto. Devuelve 409 si el DNI ya existe
-  app.post('/', {
-    ...admin,
-    schema: {
-      body: {
-        type: 'object',
-        required: ['dni', 'contrasena', 'nombre_apellido'],
-        properties: {
-          dni:              { type: 'integer' },
-          contrasena:       { type: 'string', minLength: 4 },
-          nombre_apellido:  { type: 'string' },
-          venc_ficha_medica: { type: 'string', format: 'date' },
-          permiso_salida:   { type: 'boolean' },
-          permiso_fotos:    { type: 'boolean' },
-        }
+app.post('/', {
+  ...admin,
+  schema: {
+    body: {
+      type: 'object',
+      required: ['dni', 'nombre_apellido'],
+      properties: {
+        dni:               { type: 'integer' },
+        contrasena:        { type: 'string', minLength: 4 },
+        nombre_apellido:   { type: 'string' },
+        venc_ficha_medica: { type: 'string', format: 'date' },
+        permiso_salida:    { type: 'boolean' },
+        permiso_fotos:     { type: 'boolean' },
+        template_huella:   { type: 'string' },   // ⬅ NUEVO
       }
     }
-  }, async (req, reply) => {
+  }
+}, async (req, reply) => {
+  const { dni, contrasena, nombre_apellido, venc_ficha_medica, template_huella } = req.body
+
+  // Si no mandan contraseña, usamos el DNI como password inicial (el cliente la cambia después)
+  const passwordPlano = contrasena || String(dni)
+  const hash = await bcrypt.hash(passwordPlano, 10)
+
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const { rows: [usuario] } = await client.query(
+      `INSERT INTO usuarios (dni_u, password_u, rol_u, activo_u)
+       VALUES ($1, $2, 'Cliente', true) RETURNING id_usuario`,
+      [dni, hash]
+    )
+    const { rows: [nuevoCliente] } = await client.query(
+      `INSERT INTO clientes (id_usuario, nomap_c, huella_c, activo_c, venc_ficha_medica)
+       VALUES ($1, $2, $3, true, $4) RETURNING id_cliente`,
+      [usuario.id_usuario, nombre_apellido, template_huella || '', venc_ficha_medica || null]
+    )
+    await client.query('COMMIT')
+    return reply.code(201).send({
+      id_usuario: usuario.id_usuario,
+      id_cliente: nuevoCliente.id_cliente,
+      nombre_apellido, dni
+    })
+  } catch (e) {
+    await client.query('ROLLBACK')
+    if (e.code === '23505') return reply.code(409).send({ error: 'El DNI ya está registrado' })
+    throw e
+  } finally {
+    client.release()
+  }
+}), async (req, reply) => {
     const { dni, contrasena, nombre_apellido, venc_ficha_medica } = req.body
     const hash = await bcrypt.hash(contrasena, 10)
     const client = await pool.connect()
@@ -90,7 +124,7 @@ export default async function clientesRoutes(app) {
     } finally {
       client.release()
     }
-  })
+  }
 
   // PUT /api/admin/clientes/:id
   // Actualiza datos del cliente (nombre_apellido, venc_ficha_medica, activo)
