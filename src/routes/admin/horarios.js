@@ -8,19 +8,26 @@ export default async function horariosRoutes(app) {
   };
 
   // GET /api/admin/horarios
-  app.get("/", admin, async () => {
-    const { rows } = await query(`
-      SELECT h.id_horario, h.dia_h, h.hora_h, h.cupo_maximo, h.cupo_actual,
-             h.id_actividad, h.id_profesor,
-             a.nombre_a, d.nombre_d, p.nomap_p AS profesor_nombre
-      FROM horarios h
-      JOIN actividades a ON a.id_actividad = h.id_actividad
-      JOIN disciplinas d ON d.id_disciplina = a.id_disciplina
-      LEFT JOIN profesores p ON p.id_profesor = h.id_profesor
-      ORDER BY
-        ARRAY_POSITION(ARRAY['Lunes','Martes','Miercoles','Jueves','Viernes','Sabado'], h.dia_h),
-        h.hora_h
-    `);
+  app.get("/", admin, async (req) => {
+    const { actividad } = req.query;
+
+    const { rows } = await query(
+      `
+    SELECT h.id_horario, h.dia_h, h.hora_h, h.cupo_maximo, h.cupo_actual,
+           h.id_actividad, h.id_profesor,
+           a.nombre_a, d.nombre_d, p.nomap_p AS profesor_nombre
+    FROM horarios h
+    JOIN actividades a ON a.id_actividad = h.id_actividad
+    JOIN disciplinas d ON d.id_disciplina = a.id_disciplina
+    LEFT JOIN profesores p ON p.id_profesor = h.id_profesor
+    ${actividad ? "WHERE h.id_actividad = $1" : ""}
+    ORDER BY
+      ARRAY_POSITION(ARRAY['Lunes','Martes','Miercoles','Jueves','Viernes','Sabado'], h.dia_h),
+      h.hora_h
+  `,
+      actividad ? [actividad] : [],
+    );
+
     return rows;
   });
 

@@ -20,7 +20,7 @@ export default async function disciplinasRoutes(app) {
   // ── GET /api/admin/disciplinas — panel admin ─────────────────────
   app.get('/', admin, async () => {
     const { rows } = await query(`
-      SELECT d.id_disciplina, d.nombre_d, d.descripcion_d, d.activo_d, d.imagen_d,
+      SELECT d.id_disciplina, d.nombre_d, d.descripcion_d, d.activo_d, d.imagen_d, d.tipo_d,
              p.id_precio, p.precio_1, p.precio_2, p.precio_3,
              p.precio_4, p.precio_5, p.precio_6, p.precio_dia,
              p.precio_1_debito, p.precio_2_debito, p.precio_3_debito,
@@ -38,7 +38,7 @@ export default async function disciplinasRoutes(app) {
   app.get('/publico', async () => {
     // Disciplinas activas con precios
     const { rows: disciplinas } = await query(`
-      SELECT d.id_disciplina, d.nombre_d, d.descripcion_d, d.imagen_d,
+      SELECT d.id_disciplina, d.nombre_d, d.descripcion_d, d.imagen_d, d.tipo_d,
              p.precio_1, p.precio_2, p.precio_3,
              p.precio_4, p.precio_5, p.precio_6, p.precio_dia,
              p.precio_1_debito, p.precio_2_debito, p.precio_3_debito,
