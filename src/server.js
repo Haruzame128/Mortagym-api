@@ -16,6 +16,7 @@ import horariosRoutes      from './routes/horarios.js'
 import accesoRoutes        from './routes/acceso.js'
 import clientesExportRoutes from './routes/clientes_export.js'
 import perfilRoutes from './routes/perfil.js'
+import profesorRoutes from './routes/profesor.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = Fastify({ logger: true })
@@ -57,7 +58,7 @@ app.register(horariosRoutes,  { prefix: '/api/horarios' })
 app.register(accesoRoutes,    { prefix: '/api/acceso' })
 app.register(clientesExportRoutes, { prefix: '/api/clientes' })
 app.register(perfilRoutes, { prefix: '/api/perfil' })
-
+app.register(profesorRoutes, { prefix: '/api/profesor' })
 // Health check
 app.get('/health', () => ({ status: 'ok', app: 'MortaGym API' }))
 
