@@ -38,7 +38,21 @@ await app.register(fastifyMultipart, {
 await app.register(fastifyStatic, {
   root: join(__dirname, '..', 'uploads'),
   prefix: '/uploads/',
+  decorateReply: false
 })
+
+await app.register(fastifyStatic, {
+  root: join(__dirname, '..', 'uploads', 'disciplinas'),
+  prefix: '/uploads/disciplinas/',
+  decorateReply: false
+})
+
+await app.register(fastifyStatic, {
+  root: join(__dirname, '..', 'uploads', 'disciplinas_imagenes'),
+  prefix: '/uploads/disciplinas_imagenes/',
+  decorateReply: false
+})
+
 
 // JWT
 await app.register(fastifyJwt, {
