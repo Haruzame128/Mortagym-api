@@ -210,4 +210,50 @@ export default async function profesorRoutes(app) {
 
     return rows;
   });
+
+  // GET /api/profesor/perfil
+  app.get("/perfil", profesor, async (req, reply) => {
+    const {
+      rows: [p],
+    } = await query(
+      `
+    SELECT pr.id_profesor, pr.nomap_p, pr.telefono_p, pr.celular_p,
+           pr.mail_p, pr.direccion_p, pr.fecha_nac_p,
+           u.dni_u
+    FROM profesores pr
+    JOIN usuarios u ON u.id_usuario = pr.id_usuario
+    WHERE pr.id_usuario = $1
+  `,
+      [req.user.id],
+    );
+    if (!p) return reply.code(404).send({ error: "Profesor no encontrado" });
+    return p;
+  });
+
+  // PATCH /api/profesor/perfil
+  app.patch("/perfil", profesor, async (req, reply) => {
+    const { telefono, celular, mail, direccion } = req.body;
+    const {
+      rows: [p],
+    } = await query(
+      `
+    UPDATE profesores SET
+      telefono_p  = COALESCE($1, telefono_p),
+      celular_p   = COALESCE($2, celular_p),
+      mail_p      = COALESCE($3, mail_p),
+      direccion_p = COALESCE($4, direccion_p)
+    WHERE id_usuario = $5
+    RETURNING nomap_p, telefono_p, celular_p, mail_p, direccion_p, fecha_nac_p
+  `,
+      [
+        telefono || null,
+        celular || null,
+        mail || null,
+        direccion || null,
+        req.user.id,
+      ],
+    );
+    if (!p) return reply.code(404).send({ error: "Profesor no encontrado" });
+    return { mensaje: "Datos actualizados", perfil: p };
+  });
 }
