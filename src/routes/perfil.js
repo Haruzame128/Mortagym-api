@@ -16,9 +16,19 @@ export default async function perfilRoutes(app) {
              u.dni_u,
              (SELECT EXISTS(
                SELECT 1 FROM ficha_medica fm WHERE fm.id_cliente = c.id_cliente
-             )) AS tiene_ficha
+             )) AS tiene_ficha,
+             plan.id_plan AS plan_nutricion_id,
+             plan.archivo_pdf AS plan_nutricion_url,
+             plan.nombre_original AS plan_nutricion_nombre,
+             plan.creado_en AS plan_nutricion_fecha
       FROM clientes c
       JOIN usuarios u ON u.id_usuario = c.id_usuario
+      LEFT JOIN LATERAL (
+        SELECT id_plan, archivo_pdf, nombre_original, creado_en
+        FROM planes_nutricion p
+        WHERE p.id_cliente = c.id_cliente
+        ORDER BY p.creado_en DESC LIMIT 1
+      ) plan ON true
       WHERE u.id_usuario = $1
     `,
       [id_usuario],
@@ -28,7 +38,7 @@ export default async function perfilRoutes(app) {
 
     const { rows: inscripciones } = await query(
       `
-      SELECT i.id_inscripto, a.nombre_a, d.nombre_d,
+      SELECT i.id_inscripto, a.nombre_a, d.nombre_d, d.tipo_d,
              h.dia_h, h.hora_h,
              p.nomap_p AS profesor,
              s.pago_s, s.cantidad_dias, s.fecha_s,
@@ -51,11 +61,17 @@ export default async function perfilRoutes(app) {
       0,
     );
 
-    return { ...c, inscripciones, cuota_al_dia, entradas_restantes };
+    return {
+      ...c,
+      inscripciones,
+      cuota_al_dia,
+      entradas_restantes,
+      tiene_plan_nutricion: c.plan_nutricion_id != null,
+    };
   });
 
   // GET /api/perfil/horarios-musculacion
-  app.get("/horarios-musculacion", cliente, async (req) => {
+  app.get("/horarios-musculacion", cliente, async (req, reply) => {
     const {
       rows: [c],
     } = await query(`SELECT id_cliente FROM clientes WHERE id_usuario = $1`, [

@@ -1,12 +1,11 @@
 import { query } from "../../config/database.js";
 
 export default async function actividadesRoutes(app) {
-  const admin = {
-    preHandler: [app.authenticate, app.authorize("Administrador")],
-  };
+  const ver = { preHandler: [app.authenticate, app.requierePermiso("disciplinas.ver")] };
+  const gestionar = { preHandler: [app.authenticate, app.requierePermiso("disciplinas.gestionar")] };
 
   // GET /api/admin/actividades?disciplina=:id
-  app.get("/", admin, async (req) => {
+  app.get("/", ver, async (req) => {
     const { disciplina } = req.query;
 
     const { rows } = await query(
@@ -16,7 +15,8 @@ export default async function actividadesRoutes(app) {
              d.nombre_d, d.id_disciplina, d.tipo_d,
              p.id_profesor,
              p.nomap_p AS profesor,
-             MAX(h.cupo_maximo) AS cupo_maximo,
+             COALESCE(SUM(h.cupo_maximo), 0) AS cupo_maximo,
+             COALESCE(SUM(h.cupo_actual), 0) AS cupo_ocupado,
              (SELECT COUNT(*) FROM inscripcion i WHERE i.id_actividad = a.id_actividad) AS alumnos
       FROM actividades a
       JOIN disciplinas d ON d.id_disciplina = a.id_disciplina
@@ -39,7 +39,7 @@ export default async function actividadesRoutes(app) {
   app.post(
     "/",
     {
-      ...admin,
+      ...gestionar,
       schema: {
         body: {
           type: "object",
@@ -74,7 +74,7 @@ export default async function actividadesRoutes(app) {
   );
 
   // PUT /api/admin/actividades/:id
-  app.put("/:id", admin, async (req, reply) => {
+  app.put("/:id", gestionar, async (req, reply) => {
     const { nombre, descripcion, max_inasistencia, activo, tipo_a } = req.body;
     const { rows } = await query(
       `UPDATE actividades SET
@@ -92,7 +92,7 @@ export default async function actividadesRoutes(app) {
   });
 
   // PUT /api/admin/actividades/:id/activo
-  app.put("/:id/activo", admin, async (req, reply) => {
+  app.put("/:id/activo", gestionar, async (req, reply) => {
     const { activo } = req.body;
     if (activo === undefined)
       return reply.code(400).send({ error: "activo es requerido" });
@@ -105,7 +105,7 @@ export default async function actividadesRoutes(app) {
   });
 
   // DELETE /api/admin/actividades/:id
-  app.delete("/:id", admin, async (req, reply) => {
+  app.delete("/:id", gestionar, async (req, reply) => {
     await query("DELETE FROM actividades WHERE id_actividad = $1", [req.params.id]);
     return { message: "Actividad eliminada" };
   });

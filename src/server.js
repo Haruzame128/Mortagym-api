@@ -16,6 +16,9 @@ import horariosRoutes      from './routes/horarios.js'
 import accesoRoutes        from './routes/acceso.js'
 import clientesExportRoutes from './routes/clientes_export.js'
 import perfilRoutes from './routes/perfil.js'
+import medicoRoutes from './routes/medico.js'
+import nutricionRoutes from './routes/nutricion.js'
+import initSueldos from '../scripts/init_sueldos.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = Fastify({ logger: true })
@@ -24,7 +27,7 @@ const app = Fastify({ logger: true })
 await app.register(cors, {
   origin: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-agent-key'],
   credentials: true,
 })
 
@@ -48,6 +51,13 @@ await app.register(fastifyJwt, {
 // Auth hooks
 registerAuthHooks(app)
 
+// Inicializar sistema de sueldos (crear tablas si no existen)
+try {
+  await initSueldos()
+} catch (err) {
+  console.warn('⚠️  Advertencia al inicializar sueldos:', err.message)
+}
+
 // Rutas
 app.register(authRoutes,      { prefix: '/api/auth' })
 app.register(adminRoutes,     { prefix: '/api/admin' })
@@ -57,6 +67,8 @@ app.register(horariosRoutes,  { prefix: '/api/horarios' })
 app.register(accesoRoutes,    { prefix: '/api/acceso' })
 app.register(clientesExportRoutes, { prefix: '/api/clientes' })
 app.register(perfilRoutes, { prefix: '/api/perfil' })
+app.register(medicoRoutes, { prefix: '/api/medico' })
+app.register(nutricionRoutes, { prefix: '/api/nutricion' })
 
 // Health check
 app.get('/health', () => ({ status: 'ok', app: 'MortaGym API' }))

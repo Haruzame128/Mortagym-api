@@ -13,19 +13,57 @@ const UPLOADS_IMG_DIR  = join(__dirname, '..', '..', '..', 'uploads', 'disciplin
 mkdirSync(UPLOADS_DIR,     { recursive: true })
 mkdirSync(UPLOADS_IMG_DIR, { recursive: true })
 
+// UPDATE de precios compartido entre PUT /:id/precios y PUT /:id — evita
+// mantener el mismo listado de columnas/parámetros duplicado en dos lugares.
+const actualizarPrecios = (run, idPrecio, precios) => run(
+  `UPDATE precios SET
+    precio_1   = COALESCE($1,  precio_1),   precio_2   = COALESCE($2,  precio_2),
+    precio_3   = COALESCE($3,  precio_3),   precio_4   = COALESCE($4,  precio_4),
+    precio_5   = COALESCE($5,  precio_5),   precio_6   = COALESCE($6,  precio_6),
+    precio_dia = COALESCE($7,  precio_dia),
+    precio_1_debito   = COALESCE($8,  precio_1_debito),
+    precio_2_debito   = COALESCE($9,  precio_2_debito),
+    precio_3_debito   = COALESCE($10, precio_3_debito),
+    precio_4_debito   = COALESCE($11, precio_4_debito),
+    precio_5_debito   = COALESCE($12, precio_5_debito),
+    precio_6_debito   = COALESCE($13, precio_6_debito),
+    precio_dia_debito = COALESCE($14, precio_dia_debito),
+    precio_1_profesor = COALESCE($15, precio_1_profesor),
+    precio_2_profesor = COALESCE($16, precio_2_profesor),
+    precio_3_profesor = COALESCE($17, precio_3_profesor),
+    precio_4_profesor = COALESCE($18, precio_4_profesor),
+    precio_5_profesor = COALESCE($19, precio_5_profesor),
+    precio_6_profesor = COALESCE($20, precio_6_profesor)
+   WHERE id_precio = $21`,
+  [
+    precios.precio_1, precios.precio_2, precios.precio_3,
+    precios.precio_4, precios.precio_5, precios.precio_6, precios.precio_dia,
+    precios.precio_1_debito, precios.precio_2_debito, precios.precio_3_debito,
+    precios.precio_4_debito, precios.precio_5_debito, precios.precio_6_debito,
+    precios.precio_dia_debito,
+    precios.precio_1_profesor, precios.precio_2_profesor, precios.precio_3_profesor,
+    precios.precio_4_profesor, precios.precio_5_profesor, precios.precio_6_profesor,
+    idPrecio,
+  ]
+)
+
 export default async function disciplinasRoutes(app) {
 
-  const admin = { preHandler: [app.authenticate, app.authorize('Administrador')] }
+  const ver = { preHandler: [app.authenticate, app.requierePermiso('disciplinas.ver')] }
+  const gestionar = { preHandler: [app.authenticate, app.requierePermiso('disciplinas.gestionar')] }
 
   // ── GET /api/admin/disciplinas — panel admin ─────────────────────
-  app.get('/', admin, async () => {
+  app.get('/', ver, async () => {
     const { rows } = await query(`
       SELECT d.id_disciplina, d.nombre_d, d.descripcion_d, d.activo_d, d.imagen_d, d.tipo_d,
+             d.usa_precio_profesor,
              p.id_precio, p.precio_1, p.precio_2, p.precio_3,
              p.precio_4, p.precio_5, p.precio_6, p.precio_dia,
              p.precio_1_debito, p.precio_2_debito, p.precio_3_debito,
              p.precio_4_debito, p.precio_5_debito, p.precio_6_debito,
-             p.precio_dia_debito
+             p.precio_dia_debito,
+             p.precio_1_profesor, p.precio_2_profesor, p.precio_3_profesor,
+             p.precio_4_profesor, p.precio_5_profesor, p.precio_6_profesor
       FROM disciplinas d
       JOIN precios p ON p.id_precio = d.id_precio
       ORDER BY d.nombre_d
@@ -39,6 +77,7 @@ export default async function disciplinasRoutes(app) {
     // Disciplinas activas con precios
     const { rows: disciplinas } = await query(`
       SELECT d.id_disciplina, d.nombre_d, d.descripcion_d, d.imagen_d, d.tipo_d,
+             d.requiere_matricula,
              p.precio_1, p.precio_2, p.precio_3,
              p.precio_4, p.precio_5, p.precio_6, p.precio_dia,
              p.precio_1_debito, p.precio_2_debito, p.precio_3_debito,
@@ -82,9 +121,7 @@ export default async function disciplinasRoutes(app) {
   })
 
   // ── POST /api/admin/disciplinas ──────────────────────────────────
-  app.post('/', {
-    preHandler: [app.authenticate, app.authorize('Administrador')]
-  }, async (req, reply) => {
+  app.post('/', gestionar, async (req, reply) => {
     const parts = req.parts()
     let nombre = '', descripcion = '', precios = {}
     let imagen_d = null
@@ -141,8 +178,8 @@ export default async function disciplinasRoutes(app) {
   })
 
   // ── PUT /api/admin/disciplinas/:id/precios ───────────────────────
-  app.put('/:id/precios', admin, async (req, reply) => {
-    const { precios } = req.body
+  app.put('/:id/precios', { preHandler: [app.authenticate, app.requierePermiso('precios.gestionar')] }, async (req, reply) => {
+    const { precios, usa_precio_profesor } = req.body
     if (!precios) return reply.code(400).send({ error: 'Precios requeridos' })
 
     const { rows: [disc] } = await query(
@@ -150,33 +187,18 @@ export default async function disciplinasRoutes(app) {
     )
     if (!disc) return reply.code(404).send({ error: 'Disciplina no encontrada' })
 
-    await query(
-      `UPDATE precios SET
-        precio_1   = COALESCE($1,  precio_1),   precio_2   = COALESCE($2,  precio_2),
-        precio_3   = COALESCE($3,  precio_3),   precio_4   = COALESCE($4,  precio_4),
-        precio_5   = COALESCE($5,  precio_5),   precio_6   = COALESCE($6,  precio_6),
-        precio_dia = COALESCE($7,  precio_dia),
-        precio_1_debito   = COALESCE($8,  precio_1_debito),
-        precio_2_debito   = COALESCE($9,  precio_2_debito),
-        precio_3_debito   = COALESCE($10, precio_3_debito),
-        precio_4_debito   = COALESCE($11, precio_4_debito),
-        precio_5_debito   = COALESCE($12, precio_5_debito),
-        precio_6_debito   = COALESCE($13, precio_6_debito),
-        precio_dia_debito = COALESCE($14, precio_dia_debito)
-       WHERE id_precio = $15`,
-      [
-        precios.precio_1, precios.precio_2, precios.precio_3,
-        precios.precio_4, precios.precio_5, precios.precio_6, precios.precio_dia,
-        precios.precio_1_debito, precios.precio_2_debito, precios.precio_3_debito,
-        precios.precio_4_debito, precios.precio_5_debito, precios.precio_6_debito,
-        precios.precio_dia_debito, disc.id_precio,
-      ]
-    )
+    await actualizarPrecios(query, disc.id_precio, precios)
+    if (usa_precio_profesor !== undefined) {
+      await query(
+        `UPDATE disciplinas SET usa_precio_profesor = $1 WHERE id_disciplina = $2`,
+        [usa_precio_profesor, req.params.id]
+      )
+    }
     return { message: 'Precios actualizados' }
   })
 
   // ── PUT /api/admin/disciplinas/:id/activo ────────────────────────
-  app.put('/:id/activo', admin, async (req, reply) => {
+  app.put('/:id/activo', gestionar, async (req, reply) => {
     const { activo } = req.body
     if (activo === undefined) return reply.code(400).send({ error: 'activo es requerido' })
 
@@ -189,9 +211,7 @@ export default async function disciplinasRoutes(app) {
   })
 
   // ── PUT /api/admin/disciplinas/:id ───────────────────────────────
-  app.put('/:id', {
-    preHandler: [app.authenticate, app.authorize('Administrador')]
-  }, async (req, reply) => {
+  app.put('/:id', gestionar, async (req, reply) => {
     const parts = req.parts()
     let nombre, descripcion, activo, precios
     let imagen_d = undefined
@@ -230,28 +250,7 @@ export default async function disciplinasRoutes(app) {
       }
 
       if (precios) {
-        await client.query(
-          `UPDATE precios SET
-            precio_1   = COALESCE($1,  precio_1),   precio_2   = COALESCE($2,  precio_2),
-            precio_3   = COALESCE($3,  precio_3),   precio_4   = COALESCE($4,  precio_4),
-            precio_5   = COALESCE($5,  precio_5),   precio_6   = COALESCE($6,  precio_6),
-            precio_dia = COALESCE($7,  precio_dia),
-            precio_1_debito   = COALESCE($8,  precio_1_debito),
-            precio_2_debito   = COALESCE($9,  precio_2_debito),
-            precio_3_debito   = COALESCE($10, precio_3_debito),
-            precio_4_debito   = COALESCE($11, precio_4_debito),
-            precio_5_debito   = COALESCE($12, precio_5_debito),
-            precio_6_debito   = COALESCE($13, precio_6_debito),
-            precio_dia_debito = COALESCE($14, precio_dia_debito)
-           WHERE id_precio = $15`,
-          [
-            precios.precio_1, precios.precio_2, precios.precio_3,
-            precios.precio_4, precios.precio_5, precios.precio_6, precios.precio_dia,
-            precios.precio_1_debito, precios.precio_2_debito, precios.precio_3_debito,
-            precios.precio_4_debito, precios.precio_5_debito, precios.precio_6_debito,
-            precios.precio_dia_debito, disc.id_precio,
-          ]
-        )
+        await actualizarPrecios((sql, params) => client.query(sql, params), disc.id_precio, precios)
       }
 
       await client.query('COMMIT')
@@ -265,7 +264,7 @@ export default async function disciplinasRoutes(app) {
   })
 
   // ── GET /api/admin/disciplinas/:id/imagenes ─────────────────────
-  app.get('/:id/imagenes', admin, async (req) => {
+  app.get('/:id/imagenes', ver, async (req) => {
     const { rows } = await query(
       `SELECT id_imagen, imagen, orden FROM disciplinas_imagenes
        WHERE id_disciplina = $1 ORDER BY orden`,
@@ -275,9 +274,7 @@ export default async function disciplinasRoutes(app) {
   })
 
   // ── POST /api/admin/disciplinas/:id/imagenes ─────────────────────
-  app.post('/:id/imagenes', {
-    preHandler: [app.authenticate, app.authorize('Administrador')]
-  }, async (req, reply) => {
+  app.post('/:id/imagenes', gestionar, async (req, reply) => {
     const parts = req.parts()
     let orden = 0
     let imagen = null
@@ -304,7 +301,7 @@ export default async function disciplinasRoutes(app) {
   })
 
   // ── DELETE /api/admin/disciplinas/:id/imagenes/:imgId ────────────
-  app.delete('/:id/imagenes/:imgId', admin, async (req, reply) => {
+  app.delete('/:id/imagenes/:imgId', gestionar, async (req, reply) => {
     const { rows: [img] } = await query(
       `DELETE FROM disciplinas_imagenes WHERE id_imagen = $1 AND id_disciplina = $2 RETURNING *`,
       [req.params.imgId, req.params.id]

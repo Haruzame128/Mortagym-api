@@ -1,13 +1,39 @@
 import { query } from '../config/database.js'
 
+// Lo llama el agente local de huellas (huella-agent-electron) después de
+// identificar la huella y resolverla a un DNI — no hay ningún usuario
+// logueado en la puerta, así que en vez de JWT se protege con la misma
+// clave compartida que protege /api/clientes/exportar-huellas. Si no se
+// configuró ninguna clave, no se exige (para no romper el desarrollo local).
+const verificarClaveAgente = (req, reply, done) => {
+  const clave = process.env.AGENT_API_KEY
+  if (!clave) return done()
+  if (req.headers['x-agent-key'] !== clave) {
+    return reply.code(401).send({ error: 'Clave de agente inválida' })
+  }
+  done()
+}
+
 export default async function accesoRoutes(app) {
 
   // POST /api/acceso/verificar
-  // Recibe { dni } — sin autenticación, lo llama el agente local
-  // Devuelve si el cliente puede ingresar y por qué
-  app.post('/verificar', async (req, reply) => {
+  // Recibe { dni } — lo llama el agente local ya resuelta la huella a un
+  // DNI. Devuelve si el cliente puede ingresar y por qué, y descuenta 1
+  // entrada si corresponde. Cada intento (autorizado o no) queda registrado
+  // en asistencia_cliente para poder auditarlo.
+  app.post('/verificar', { preHandler: verificarClaveAgente }, async (req, reply) => {
     const { dni } = req.body
+    // Con qué se identificó esta vez — hoy siempre 'huella' (el ingreso por
+    // PIN todavía requiere integrar el teclado del molinete), pero el campo
+    // ya se acepta y se registra para cuando esté esa parte.
+    const metodo = req.body.metodo === 'pin' ? 'pin' : 'huella'
     if (!dni) return reply.code(400).send({ error: 'Falta el campo dni' })
+
+    const registrar = (resultado, id_cliente = null, id_suscripcion = null) =>
+      query(`
+        INSERT INTO asistencia_cliente (id_cliente, dni_ingresado, id_suscripcion, permitido, motivo, mensaje, metodo)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `, [id_cliente, String(dni), id_suscripcion, resultado.permitido, resultado.motivo, resultado.mensaje, metodo])
 
     // 1 — Buscar usuario + cliente
     const { rows: [cliente] } = await query(`
@@ -19,21 +45,25 @@ export default async function accesoRoutes(app) {
     `, [String(dni)])
 
     if (!cliente) {
-      return reply.send({
+      const resultado = {
         permitido: false,
         motivo: 'no_encontrado',
         mensaje: 'El cliente no existe en el sistema',
         cliente: null,
-      })
+      }
+      await registrar(resultado)
+      return reply.send(resultado)
     }
 
     if (!cliente.activo_u || !cliente.activo_c) {
-      return reply.send({
+      const resultado = {
         permitido: false,
         motivo: 'inactivo',
         mensaje: 'La cuenta del cliente está desactivada',
         cliente: { nombre: cliente.nomap_c, dni: cliente.dni_u },
-      })
+      }
+      await registrar(resultado, cliente.id_cliente)
+      return reply.send(resultado)
     }
 
     // 2 — Buscar suscripciones activas
@@ -88,12 +118,14 @@ export default async function accesoRoutes(app) {
         }
       }
 
-      return reply.send({
+      const resultado = {
         permitido: false,
         motivo,
         mensaje,
         cliente: { nombre: cliente.nomap_c, dni: cliente.dni_u },
-      })
+      }
+      await registrar(resultado, cliente.id_cliente)
+      return reply.send(resultado)
     }
 
     // 3 — Acceso permitido: descontar 1 entrada de la primer suscripción válida
@@ -104,7 +136,7 @@ export default async function accesoRoutes(app) {
       WHERE id_suscripcion = $1
     `, [suscActiva.id_suscripcion])
 
-    return reply.send({
+    const resultado = {
       permitido: true,
       motivo: 'ok',
       mensaje: 'Acceso autorizado',
@@ -115,7 +147,24 @@ export default async function accesoRoutes(app) {
         entradas_restantes: suscActiva.entradas_restantes - 1, // post-descuento
         entradas_totales:   suscActiva.entradas_totales,
       },
-    })
+    }
+    await registrar(resultado, cliente.id_cliente, suscActiva.id_suscripcion)
+    return reply.send(resultado)
+  })
+
+
+  // GET /api/acceso/historial/:id_cliente — últimos ingresos de un cliente
+  app.get('/historial/:id_cliente', {
+    preHandler: [app.authenticate, app.authorize('Administrador', 'Recepcion')],
+  }, async (req) => {
+    const { rows } = await query(`
+      SELECT id_asistencia, fecha_hora, permitido, motivo, mensaje, metodo
+      FROM asistencia_cliente
+      WHERE id_cliente = $1
+      ORDER BY fecha_hora DESC
+      LIMIT 50
+    `, [req.params.id_cliente])
+    return rows
   })
 
 

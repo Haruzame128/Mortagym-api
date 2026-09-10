@@ -3,19 +3,22 @@ import { query } from "../../config/database.js";
 const DIAS = ["Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado"];
 
 export default async function horariosRoutes(app) {
-  const admin = {
-    preHandler: [app.authenticate, app.authorize("Administrador")],
-  };
+  const ver = { preHandler: [app.authenticate, app.requierePermiso("horarios.ver")] };
+  const gestionar = { preHandler: [app.authenticate, app.requierePermiso("horarios.gestionar")] };
 
   // GET /api/admin/horarios
-  app.get("/", admin, async (req) => {
+  app.get("/", ver, async (req) => {
     const { actividad } = req.query;
 
     const { rows } = await query(
       `
     SELECT h.id_horario, h.dia_h, h.hora_h, h.cupo_maximo, h.cupo_actual,
            h.id_actividad, h.id_profesor,
-           a.nombre_a, d.nombre_d, p.nomap_p AS profesor_nombre
+           a.nombre_a, d.nombre_d, p.nomap_p AS profesor_nombre,
+           (SELECT STRING_AGG(p2.nomap_p, ', ' ORDER BY p2.nomap_p)
+            FROM horario_profesores hp
+            JOIN profesores p2 ON p2.id_profesor = hp.id_profesor
+            WHERE hp.id_horario = h.id_horario) AS coprofesores_nombres
     FROM horarios h
     JOIN actividades a ON a.id_actividad = h.id_actividad
     JOIN disciplinas d ON d.id_disciplina = a.id_disciplina
@@ -35,7 +38,7 @@ export default async function horariosRoutes(app) {
   app.post(
     "/",
     {
-      ...admin,
+      ...gestionar,
       schema: {
         body: {
           type: "object",
@@ -83,7 +86,7 @@ export default async function horariosRoutes(app) {
   );
 
   // PUT /api/admin/horarios/:id
-  app.put("/:id", admin, async (req, reply) => {
+  app.put("/:id", gestionar, async (req, reply) => {
     const { dia, hora, cupo_maximo, cupo_actual, id_profesor } = req.body;
     const { rows } = await query(
       `UPDATE horarios SET
@@ -100,8 +103,49 @@ export default async function horariosRoutes(app) {
     return rows[0];
   });
 
+  // GET /api/admin/horarios/:id/coprofesores — profesores adicionales que
+  // dan esa misma clase junto al titular (ej. Natación). Cada uno cobra su
+  // sueldo completo por ese horario, de forma independiente.
+  app.get("/:id/coprofesores", ver, async (req) => {
+    const { rows } = await query(
+      `SELECT p.id_profesor, p.nomap_p
+       FROM horario_profesores hp
+       JOIN profesores p ON p.id_profesor = hp.id_profesor
+       WHERE hp.id_horario = $1
+       ORDER BY p.nomap_p`,
+      [req.params.id],
+    );
+    return rows;
+  });
+
+  // PUT /api/admin/horarios/:id/coprofesores — reemplaza el conjunto completo
+  app.put("/:id/coprofesores", gestionar, async (req, reply) => {
+    const { id_profesores } = req.body;
+    if (!Array.isArray(id_profesores)) {
+      return reply.code(400).send({ error: "id_profesores debe ser un array" });
+    }
+
+    const { rows: [horario] } = await query(
+      `SELECT id_profesor FROM horarios WHERE id_horario = $1`,
+      [req.params.id],
+    );
+    if (!horario) return reply.code(404).send({ error: "Horario no encontrado" });
+    if (id_profesores.some((id) => Number(id) === Number(horario.id_profesor))) {
+      return reply.code(400).send({ error: "El titular del horario no puede cargarse también como co-profesor" });
+    }
+
+    await query(`DELETE FROM horario_profesores WHERE id_horario = $1`, [req.params.id]);
+    for (const id_profesor of id_profesores) {
+      await query(
+        `INSERT INTO horario_profesores (id_horario, id_profesor) VALUES ($1, $2)`,
+        [req.params.id, id_profesor],
+      );
+    }
+    return { message: "Co-profesores actualizados" };
+  });
+
   // DELETE /api/admin/horarios/:id
-  app.delete("/:id", admin, async (req, reply) => {
+  app.delete("/:id", gestionar, async (req, reply) => {
     await query(`DELETE FROM horarios WHERE id_horario = $1`, [req.params.id]);
     return { message: "Horario eliminado" };
   });

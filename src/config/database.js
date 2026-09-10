@@ -12,6 +12,13 @@ export const pool = new Pool({
   max: 10,                    // máximo de conexiones (PgBouncer ya maneja el pool, esto es el pool local)
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
+  // El servidor corre en UTC. Sin esto, CURRENT_DATE/now() se adelantan a
+  // "mañana" desde ~21hs hora Argentina (movimientos, revisaciones, contratos,
+  // todo lo que dependa de la fecha del día se ve afectado). Va como parámetro
+  // de arranque de la conexión (sin query aparte, sin carreras con el pool).
+  // Se fija también a nivel de base con ALTER DATABASE, como red de
+  // seguridad por si se levanta contra una base que no la tenga configurada.
+  options: '-c timezone=America/Argentina/Buenos_Aires',
 })
 
 // Test de conexión al arrancar

@@ -24,15 +24,13 @@ export default async function authRoutes(app) {
               u.password_u        AS password,
               u.rol_u             AS rol,
               u.activo_u          AS activo,
-              COALESCE(c.nomap_c, p.nomap_p) AS nombre
+              COALESCE(c.nomap_c, p.nomap_p, u.nombre_u) AS nombre
        FROM usuarios u
        LEFT JOIN clientes   c ON c.id_usuario = u.id_usuario
        LEFT JOIN profesores p ON p.id_usuario = u.id_usuario
        WHERE u.dni_u = $1`,
       [dni]
     )
-    console.log('DNI recibido:', dni, typeof dni)
-    console.log('ROWS:', rows)
     const user = rows[0]
     if (!user)        return reply.code(401).send({ error: 'DNI o contraseña incorrectos' })
     if (!user.activo) return reply.code(403).send({ error: 'Usuario inactivo' })
@@ -67,7 +65,7 @@ export default async function authRoutes(app) {
               u.dni_u      AS dni,
               u.rol_u      AS rol,
               u.activo_u   AS activo,
-              COALESCE(c.nomap_c, p.nomap_p) AS nombre
+              COALESCE(c.nomap_c, p.nomap_p, u.nombre_u) AS nombre
        FROM usuarios u
        LEFT JOIN clientes   c ON c.id_usuario = u.id_usuario
        LEFT JOIN profesores p ON p.id_usuario = u.id_usuario

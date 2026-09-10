@@ -13,7 +13,8 @@ mkdirSync(UPLOADS_DIR, { recursive: true })
 
 export default async function serviciosRoutes(app) {
 
-  const admin = { preHandler: [app.authenticate, app.authorize('Administrador')] }
+  const ver = { preHandler: [app.authenticate, app.requierePermiso('servicios.ver')] }
+  const gestionar = { preHandler: [app.authenticate, app.requierePermiso('servicios.gestionar')] }
 
   // GET /api/servicios — público, lo usa el Home
   app.get('/', async () => {
@@ -27,7 +28,7 @@ export default async function serviciosRoutes(app) {
   })
 
   // GET /api/servicios/admin — todos (activos e inactivos) para el panel admin
-  app.get('/admin', admin, async () => {
+  app.get('/admin', ver, async () => {
     const { rows } = await query(`
       SELECT id_servicio, nombre_s, descripcion_s, extra_s, redes_s, imagen_s, activo_s
       FROM servicios
@@ -37,9 +38,7 @@ export default async function serviciosRoutes(app) {
   })
 
   // POST /api/servicios
-  app.post('/', {
-    preHandler: [app.authenticate, app.authorize('Administrador')]
-  }, async (req, reply) => {
+  app.post('/', gestionar, async (req, reply) => {
     const parts = req.parts()
     let nombre = '', descripcion = '', extra = '', redes = ''
     let imagen_s = null
@@ -70,9 +69,7 @@ export default async function serviciosRoutes(app) {
   })
 
   // PUT /api/servicios/:id
-  app.put('/:id', {
-    preHandler: [app.authenticate, app.authorize('Administrador')]
-  }, async (req, reply) => {
+  app.put('/:id', gestionar, async (req, reply) => {
     const parts = req.parts()
     let nombre, descripcion, extra, redes, activo
     let imagen_s = undefined
