@@ -19,6 +19,7 @@ import perfilRoutes from './routes/perfil.js'
 import medicoRoutes from './routes/medico.js'
 import nutricionRoutes from './routes/nutricion.js'
 import initSueldos from '../scripts/init_sueldos.js'
+import profesorRoutes from './routes/profesor.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = Fastify({ logger: true })
@@ -67,6 +68,7 @@ app.register(horariosRoutes,  { prefix: '/api/horarios' })
 app.register(accesoRoutes,    { prefix: '/api/acceso' })
 app.register(clientesExportRoutes, { prefix: '/api/clientes' })
 app.register(perfilRoutes, { prefix: '/api/perfil' })
+app.register(profesorRoutes, { prefix: '/api/profesor' })
 app.register(medicoRoutes, { prefix: '/api/medico' })
 app.register(nutricionRoutes, { prefix: '/api/nutricion' })
 
