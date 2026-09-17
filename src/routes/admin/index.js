@@ -15,6 +15,8 @@ import matriculaPrecioRoutes  from './matricula-precio.js'
 import listaEsperaRoutes      from './lista-espera.js'
 import cuposDisponiblesRoutes from './cupos-disponibles.js'
 import fichaConfigRoutes      from './ficha-config.js'
+import ejerciciosRoutes       from './ejercicios.js'
+import categoriasEjercicioRoutes from './categorias-ejercicio.js'
 
 export default async function adminRoutes(app) {
   app.register(usuariosRoutes,    { prefix: '/usuarios' })
@@ -34,4 +36,6 @@ export default async function adminRoutes(app) {
   app.register(listaEsperaRoutes,      { prefix: '/lista-espera' })
   app.register(cuposDisponiblesRoutes, { prefix: '/cupos-disponibles' })
   app.register(fichaConfigRoutes,      { prefix: '/ficha-config' })
+  app.register(ejerciciosRoutes,       { prefix: '/ejercicios' })
+  app.register(categoriasEjercicioRoutes, { prefix: '/categorias-ejercicio' })
 }

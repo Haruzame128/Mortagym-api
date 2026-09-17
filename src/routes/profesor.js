@@ -60,8 +60,10 @@ export default async function profesorRoutes(app) {
   // GET /api/profesor/ejercicios
   app.get("/ejercicios", profesor, async () => {
     const { rows } = await query(`
-      SELECT id_ejercicio, nombre_e, categoria_e
-      FROM ejercicios ORDER BY categoria_e, nombre_e
+      SELECT e.id_ejercicio, e.nombre_e, c.nombre_categoria AS categoria_e
+      FROM ejercicios e
+      JOIN categorias_ejercicio c ON c.id_categoria = e.id_categoria
+      ORDER BY c.nombre_categoria, e.nombre_e
     `);
     return rows;
   });
@@ -90,14 +92,15 @@ export default async function profesorRoutes(app) {
       `
       SELECT cr.id_cronograma, cr.semana_c, cr.mes_c,
              r.id_rutina, r.dia_r, r.series_r, r.repeticiones_r, r.peso_r,
-             e.id_ejercicio, e.nombre_e, e.categoria_e,
+             e.id_ejercicio, e.nombre_e, cat.nombre_categoria AS categoria_e,
              p.series_cliente, p.repeticion_cliente, p.peso_cliente, p.fecha AS fecha_progreso
       FROM cronograma cr
       JOIN rutinas r     ON r.id_rutina    = cr.id_rutina
       JOIN ejercicios e  ON e.id_ejercicio = r.id_ejercicio
+      JOIN categorias_ejercicio cat ON cat.id_categoria = e.id_categoria
       LEFT JOIN progreso p ON p.id_rutina = r.id_rutina AND p.semana_p = cr.semana_c
       ${where}
-      ORDER BY cr.semana_c, r.dia_r, e.categoria_e, e.nombre_e
+      ORDER BY cr.semana_c, r.dia_r, cat.nombre_categoria, e.nombre_e
     `,
       params,
     );
