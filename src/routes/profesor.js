@@ -63,6 +63,7 @@ export default async function profesorRoutes(app) {
       SELECT e.id_ejercicio, e.nombre_e, c.nombre_categoria AS categoria_e
       FROM ejercicios e
       JOIN categorias_ejercicio c ON c.id_categoria = e.id_categoria
+      WHERE e.activo_e = true
       ORDER BY c.nombre_categoria, e.nombre_e
     `);
     return rows;
