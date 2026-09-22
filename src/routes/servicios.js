@@ -8,6 +8,7 @@ import { randomUUID } from 'crypto'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const UPLOADS_DIR = join(__dirname, '..', '..', 'uploads', 'servicios')
+const MIMETYPES_IMAGEN = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 
 mkdirSync(UPLOADS_DIR, { recursive: true })
 
@@ -45,6 +46,9 @@ export default async function serviciosRoutes(app) {
 
     for await (const part of parts) {
       if (part.type === 'file' && part.fieldname === 'imagen') {
+        if (!MIMETYPES_IMAGEN.includes(part.mimetype)) {
+          return reply.code(400).send({ error: 'La imagen debe ser JPEG, PNG, WEBP o GIF' })
+        }
         const ext = part.filename.split('.').pop()
         const filename = `${randomUUID()}.${ext}`
         await pipeline(part.file, createWriteStream(join(UPLOADS_DIR, filename)))
@@ -76,6 +80,9 @@ export default async function serviciosRoutes(app) {
 
     for await (const part of parts) {
       if (part.type === 'file' && part.fieldname === 'imagen') {
+        if (!MIMETYPES_IMAGEN.includes(part.mimetype)) {
+          return reply.code(400).send({ error: 'La imagen debe ser JPEG, PNG, WEBP o GIF' })
+        }
         const ext = part.filename.split('.').pop()
         const filename = `${randomUUID()}.${ext}`
         await pipeline(part.file, createWriteStream(join(UPLOADS_DIR, filename)))

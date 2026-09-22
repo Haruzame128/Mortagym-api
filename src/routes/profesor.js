@@ -122,7 +122,29 @@ export default async function profesorRoutes(app) {
             id_cliente: { type: "integer" },
             mes: { type: "string" },
             semana: { type: "integer" },
-            dias: { type: "array" },
+            dias: {
+              type: "array",
+              items: {
+                type: "object",
+                required: ["dia", "ejercicios"],
+                properties: {
+                  dia: {},
+                  ejercicios: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      required: ["id_ejercicio"],
+                      properties: {
+                        id_ejercicio: { type: "integer" },
+                        series: { type: "integer" },
+                        repeticiones: { type: "integer" },
+                        peso: { type: "number" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
           },
         },
       },
@@ -132,6 +154,24 @@ export default async function profesorRoutes(app) {
       const id_profesor = await getIdProfesor(req.user.id);
       if (!id_profesor)
         return reply.code(404).send({ error: "Profesor no encontrado" });
+
+      // El alumno tiene que estar inscripto en una actividad dictada por
+      // este profesor — si no, cualquier profesor podría cargarle rutina a
+      // un cliente ajeno con solo saber su id_cliente.
+      const {
+        rows: [alumno],
+      } = await query(
+        `SELECT 1 FROM horarios h
+         JOIN actividades a ON a.id_actividad = h.id_actividad
+         JOIN inscripcion i ON i.id_actividad = a.id_actividad AND i.id_horario = h.id_horario
+         WHERE h.id_profesor = $1 AND i.id_cliente = $2
+         LIMIT 1`,
+        [id_profesor, id_cliente],
+      );
+      if (!alumno)
+        return reply
+          .code(404)
+          .send({ error: "El cliente no es alumno de este profesor" });
 
       const client = await pool.connect();
       try {
@@ -235,7 +275,20 @@ export default async function profesorRoutes(app) {
   });
 
   // PATCH /api/profesor/perfil
-  app.patch("/perfil", profesor, async (req, reply) => {
+  app.patch("/perfil", {
+    ...profesor,
+    schema: {
+      body: {
+        type: "object",
+        properties: {
+          telefono: { type: "string" },
+          celular: { type: "string" },
+          mail: { type: "string", format: "email" },
+          direccion: { type: "string" },
+        },
+      },
+    },
+  }, async (req, reply) => {
     const { telefono, celular, mail, direccion } = req.body;
     const {
       rows: [p],

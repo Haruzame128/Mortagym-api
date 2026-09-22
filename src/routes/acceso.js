@@ -21,13 +21,24 @@ export default async function accesoRoutes(app) {
   // DNI. Devuelve si el cliente puede ingresar y por qué, y descuenta 1
   // entrada si corresponde. Cada intento (autorizado o no) queda registrado
   // en asistencia_cliente para poder auditarlo.
-  app.post('/verificar', { preHandler: verificarClaveAgente }, async (req, reply) => {
+  app.post('/verificar', {
+    preHandler: verificarClaveAgente,
+    schema: {
+      body: {
+        type: 'object',
+        required: ['dni'],
+        properties: {
+          dni: { type: ['string', 'integer'], minLength: 1 },
+          metodo: { type: 'string' },
+        }
+      }
+    }
+  }, async (req, reply) => {
     const { dni } = req.body
     // Con qué se identificó esta vez — hoy siempre 'huella' (el ingreso por
     // PIN todavía requiere integrar el teclado del molinete), pero el campo
     // ya se acepta y se registra para cuando esté esa parte.
     const metodo = req.body.metodo === 'pin' ? 'pin' : 'huella'
-    if (!dni) return reply.code(400).send({ error: 'Falta el campo dni' })
 
     const registrar = (resultado, id_cliente = null, id_suscripcion = null) =>
       query(`
@@ -172,9 +183,17 @@ export default async function accesoRoutes(app) {
   // Útil para recepción manual, si en el futuro se necesita
   app.post('/registrar-entrada', {
     preHandler: [app.authenticate, app.authorize('Administrador', 'Recepcion')],
+    schema: {
+      body: {
+        type: 'object',
+        required: ['id_suscripcion'],
+        properties: {
+          id_suscripcion: { type: 'integer' },
+        }
+      }
+    }
   }, async (req, reply) => {
     const { id_suscripcion } = req.body
-    if (!id_suscripcion) return reply.code(400).send({ error: 'Falta id_suscripcion' })
 
     const { rows: [updated] } = await query(`
       UPDATE suscripciones

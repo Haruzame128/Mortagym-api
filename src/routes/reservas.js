@@ -60,6 +60,9 @@ export default async function reservasRoutes(app) {
         )
         if (!c) return reply.code(403).send({ error: 'Cliente no encontrado' })
         id_cliente = c.id_cliente
+      } else if (!id_cliente) {
+        await db.query('ROLLBACK')
+        return reply.code(400).send({ error: 'id_cliente es requerido' })
       }
 
       // Verificar cupos con lock

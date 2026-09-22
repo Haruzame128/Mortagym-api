@@ -9,6 +9,7 @@ import { randomUUID } from 'crypto'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const UPLOADS_DIR      = join(__dirname, '..', '..', '..', 'uploads', 'disciplinas')
 const UPLOADS_IMG_DIR  = join(__dirname, '..', '..', '..', 'uploads', 'disciplinas_imagenes')
+const MIMETYPES_IMAGEN = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 
 mkdirSync(UPLOADS_DIR,     { recursive: true })
 mkdirSync(UPLOADS_IMG_DIR, { recursive: true })
@@ -125,9 +126,13 @@ export default async function disciplinasRoutes(app) {
     const parts = req.parts()
     let nombre = '', descripcion = '', precios = {}
     let imagen_d = null
+    let preciosInvalidos = false
 
     for await (const part of parts) {
       if (part.type === 'file' && part.fieldname === 'imagen') {
+        if (!MIMETYPES_IMAGEN.includes(part.mimetype)) {
+          return reply.code(400).send({ error: 'La imagen debe ser JPEG, PNG, WEBP o GIF' })
+        }
         const ext = part.filename.split('.').pop()
         const filename = `${randomUUID()}.${ext}`
         await pipeline(part.file, createWriteStream(join(UPLOADS_DIR, filename)))
@@ -136,11 +141,14 @@ export default async function disciplinasRoutes(app) {
         const val = part.value
         if (part.fieldname === 'nombre')      nombre      = val
         if (part.fieldname === 'descripcion') descripcion = val
-        if (part.fieldname === 'precios')     precios     = JSON.parse(val)
+        if (part.fieldname === 'precios') {
+          try { precios = JSON.parse(val) } catch { preciosInvalidos = true }
+        }
       }
     }
 
     if (!nombre) return reply.code(400).send({ error: 'El nombre es obligatorio' })
+    if (preciosInvalidos) return reply.code(400).send({ error: 'precios debe ser un JSON válido' })
 
     const client = await pool.connect()
     try {
@@ -178,9 +186,33 @@ export default async function disciplinasRoutes(app) {
   })
 
   // ── PUT /api/admin/disciplinas/:id/precios ───────────────────────
-  app.put('/:id/precios', { preHandler: [app.authenticate, app.requierePermiso('precios.gestionar')] }, async (req, reply) => {
+  const precioProp = { type: 'number', minimum: 0 }
+  app.put('/:id/precios', {
+    preHandler: [app.authenticate, app.requierePermiso('precios.gestionar')],
+    schema: {
+      body: {
+        type: 'object',
+        required: ['precios'],
+        properties: {
+          usa_precio_profesor: { type: 'boolean' },
+          precios: {
+            type: 'object',
+            properties: {
+              precio_1: precioProp, precio_2: precioProp, precio_3: precioProp,
+              precio_4: precioProp, precio_5: precioProp, precio_6: precioProp,
+              precio_dia: precioProp,
+              precio_1_debito: precioProp, precio_2_debito: precioProp, precio_3_debito: precioProp,
+              precio_4_debito: precioProp, precio_5_debito: precioProp, precio_6_debito: precioProp,
+              precio_dia_debito: precioProp,
+              precio_1_profesor: precioProp, precio_2_profesor: precioProp, precio_3_profesor: precioProp,
+              precio_4_profesor: precioProp, precio_5_profesor: precioProp, precio_6_profesor: precioProp,
+            }
+          }
+        }
+      }
+    }
+  }, async (req, reply) => {
     const { precios, usa_precio_profesor } = req.body
-    if (!precios) return reply.code(400).send({ error: 'Precios requeridos' })
 
     const { rows: [disc] } = await query(
       `SELECT id_precio FROM disciplinas WHERE id_disciplina = $1`, [req.params.id]
@@ -215,9 +247,13 @@ export default async function disciplinasRoutes(app) {
     const parts = req.parts()
     let nombre, descripcion, activo, precios
     let imagen_d = undefined
+    let preciosInvalidos = false
 
     for await (const part of parts) {
       if (part.type === 'file' && part.fieldname === 'imagen') {
+        if (!MIMETYPES_IMAGEN.includes(part.mimetype)) {
+          return reply.code(400).send({ error: 'La imagen debe ser JPEG, PNG, WEBP o GIF' })
+        }
         const ext = part.filename.split('.').pop()
         const filename = `${randomUUID()}.${ext}`
         await pipeline(part.file, createWriteStream(join(UPLOADS_DIR, filename)))
@@ -227,9 +263,13 @@ export default async function disciplinasRoutes(app) {
         if (part.fieldname === 'nombre')      nombre      = val
         if (part.fieldname === 'descripcion') descripcion = val
         if (part.fieldname === 'activo')      activo      = val === 'true'
-        if (part.fieldname === 'precios')     precios     = JSON.parse(val)
+        if (part.fieldname === 'precios') {
+          try { precios = JSON.parse(val) } catch { preciosInvalidos = true }
+        }
       }
     }
+
+    if (preciosInvalidos) return reply.code(400).send({ error: 'precios debe ser un JSON válido' })
 
     const client = await pool.connect()
     try {
@@ -281,6 +321,9 @@ export default async function disciplinasRoutes(app) {
 
     for await (const part of parts) {
       if (part.type === 'file' && part.fieldname === 'imagen') {
+        if (!MIMETYPES_IMAGEN.includes(part.mimetype)) {
+          return reply.code(400).send({ error: 'La imagen debe ser JPEG, PNG, WEBP o GIF' })
+        }
         const ext = part.filename.split('.').pop()
         const filename = `${randomUUID()}.${ext}`
         await pipeline(part.file, createWriteStream(join(UPLOADS_IMG_DIR, filename)))

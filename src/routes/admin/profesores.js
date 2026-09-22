@@ -76,7 +76,17 @@ export default async function profesoresRoutes(app) {
   // PUT /api/admin/profesores/:id/apto-medico
   // Registra la entrega del certificado médico físico. El vencimiento se
   // calcula solo (un año desde la entrega). Con fecha_entrega=null se limpia.
-  app.put("/:id/apto-medico", admin, async (req, reply) => {
+  app.put("/:id/apto-medico", {
+    ...admin,
+    schema: {
+      body: {
+        type: "object",
+        properties: {
+          fecha_entrega: { type: ["string", "null"], format: "date" },
+        },
+      },
+    },
+  }, async (req, reply) => {
     const { fecha_entrega } = req.body;
     const { rows } = await query(
       `UPDATE profesores SET
@@ -174,7 +184,22 @@ export default async function profesoresRoutes(app) {
   // PUT /api/admin/profesores/:id
   // activo_p ya no se toca acá: lo derivan las funciones de contrato
   // (rescindir_contrato_profesor / vencer_contratos_profesor / crearContrato).
-  app.put("/:id", admin, async (req, reply) => {
+  app.put("/:id", {
+    ...admin,
+    schema: {
+      body: {
+        type: "object",
+        properties: {
+          nombre_apellido: { type: "string" },
+          direccion: { type: "string" },
+          telefono: { type: "string" },
+          celular: { type: "string" },
+          fecha_nac: { type: ["string", "null"], format: "date" },
+          mail: { type: ["string", "null"], format: "email" },
+        },
+      },
+    },
+  }, async (req, reply) => {
     const {
       nombre_apellido, direccion, telefono, celular, fecha_nac, mail,
     } = req.body;

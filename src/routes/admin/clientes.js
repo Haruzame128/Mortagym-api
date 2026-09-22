@@ -5,6 +5,51 @@ export default async function clientesRoutes(app) {
 
   const admin = { preHandler: [app.authenticate, app.authorize('Administrador', 'Recepcion')] }
 
+  // Schema de ficha_medica compartido entre POST / (alta) y PUT /:id/ficha-medica
+  // (upsert) — evita que un body vacío/mal tipado explote al leer f.altura, etc.
+  const fichaMedicaSchema = {
+    type: 'object',
+    properties: {
+      altura: { type: ['number', 'null'] },
+      peso: { type: ['number', 'null'] },
+      grupoSanguineo: { type: ['string', 'null'] },
+      patologiaColumna: { type: 'boolean' },
+      patologiaColumnaDetalle: { type: ['string', 'null'] },
+      otrasPatologias: { type: 'boolean' },
+      otrasPatologiasDetalle: { type: ['string', 'null'] },
+      enfermedadCardiaca: { type: 'boolean' },
+      enfermedadCardiacaDetalle: { type: ['string', 'null'] },
+      lesiones: { type: 'boolean' },
+      lesionesDetalle: { type: ['string', 'null'] },
+      practicaDeportes: { type: 'boolean' },
+      practicaDeportesDetalle: { type: ['string', 'null'] },
+      mareos: { type: 'boolean' },
+      mareosDetalle: { type: ['string', 'null'] },
+      dolorCabeza: { type: 'boolean' },
+      dolorCabezaDetalle: { type: ['string', 'null'] },
+      desmayos: { type: 'boolean' },
+      desmayosDetalle: { type: ['string', 'null'] },
+      hemorragiasNasales: { type: 'boolean' },
+      hemorragiasNasalesDetalle: { type: ['string', 'null'] },
+      doloresArticulaciones: { type: 'boolean' },
+      doloresArticulacionesDetalle: { type: ['string', 'null'] },
+      piePlano: { type: 'boolean' },
+      piePlanoDetalle: { type: ['string', 'null'] },
+      problemasRodillaTobillo: { type: 'boolean' },
+      problemasRodillaTobilloDetalle: { type: ['string', 'null'] },
+      cirugias: { type: 'boolean' },
+      cirugiasDetalle: { type: ['string', 'null'] },
+      convulsiones: { type: 'boolean' },
+      convulsionesDetalle: { type: ['string', 'null'] },
+      problemasRespiratorios: { type: 'boolean' },
+      problemasRespiratoriosDetalle: { type: ['string', 'null'] },
+      medicacion: { type: 'boolean' },
+      medicacionDetalle: { type: ['string', 'null'] },
+      alergico: { type: 'boolean' },
+      alergicoDetalle: { type: ['string', 'null'] },
+    }
+  }
+
   // Estado del apto médico físico (distinto de la ficha_medica digital de la
   // inscripción): vigente si venc_ficha_medica todavía no pasó; pendiente si
   // nunca se entregó pero todavía está dentro del mes de plazo desde el alta;
@@ -191,6 +236,7 @@ export default async function clientesRoutes(app) {
     tarjeta: 'Debito', mercadopago: 'Otro',
   }
   const mapearMedioPago = (tipoPago) => MEDIO_PAGO_DB[tipoPago] || 'Efectivo'
+  const TIPOS_PAGO = Object.keys(MEDIO_PAGO_DB)
 
   // ── Helper: registrar el cobro de una cuota como Ingreso ──────
   const registrarIngresoCuota = async (client, { id_usuario, id_suscripcion, id_inscripto, monto, medio_pago, descripcion }) => {
@@ -273,13 +319,13 @@ export default async function clientesRoutes(app) {
         properties: {
           dni:               { type: 'integer' },
           nombre_apellido:   { type: 'string' },
-          contrasena:        { type: 'string' },
+          contrasena:        { type: 'string', minLength: 4 },
           direccion:         { type: 'string' },
           telefono:          { type: 'string' },
           tel_emergencia:    { type: 'string' },
-          fecha_nac:         { type: 'string' },
-          venc_ficha_medica: { type: 'string' },
-          ficha_medica:      { type: 'object' },
+          fecha_nac:         { type: 'string', format: 'date' },
+          venc_ficha_medica: { type: 'string', format: 'date' },
+          ficha_medica:      fichaMedicaSchema,
           inscripciones:     { type: 'array' },
         }
       }
@@ -399,7 +445,23 @@ export default async function clientesRoutes(app) {
   })
 
   // PUT /api/admin/clientes/:id
-  app.put('/:id', admin, async (req, reply) => {
+  app.put('/:id', {
+    ...admin,
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          nombre_apellido:   { type: 'string' },
+          venc_ficha_medica: { type: ['string', 'null'], format: 'date' },
+          activo:            { type: 'boolean' },
+          direccion:         { type: ['string', 'null'] },
+          telefono:          { type: ['string', 'null'] },
+          tel_emergencia:    { type: ['string', 'null'] },
+          fecha_nac:         { type: ['string', 'null'], format: 'date' },
+        }
+      }
+    }
+  }, async (req, reply) => {
     const { nombre_apellido, venc_ficha_medica, activo, direccion,
             telefono, tel_emergencia, fecha_nac } = req.body
     const { rows } = await query(
@@ -431,9 +493,20 @@ export default async function clientesRoutes(app) {
   })
 
   // POST /api/admin/clientes/:id/huellas — agrega una huella más (no reemplaza)
-  app.post('/:id/huellas', admin, async (req, reply) => {
+  app.post('/:id/huellas', {
+    ...admin,
+    schema: {
+      body: {
+        type: 'object',
+        required: ['template_huella'],
+        properties: {
+          template_huella: { type: 'string', minLength: 1, maxLength: 10000 },
+          etiqueta: { type: ['string', 'null'], maxLength: 100 },
+        }
+      }
+    }
+  }, async (req, reply) => {
     const { template_huella, etiqueta } = req.body
-    if (!template_huella) return reply.code(400).send({ error: 'Falta template_huella' })
     const { rows: [huella] } = await query(
       `INSERT INTO huellas_cliente (id_cliente, template_huella, etiqueta)
        VALUES ($1, $2, $3) RETURNING id_huella, etiqueta, creado_en`,
@@ -455,7 +528,17 @@ export default async function clientesRoutes(app) {
   // PUT /api/admin/clientes/:id/pin — PIN alternativo para el molinete
   // (útil sobre todo con niños a los que no les toma bien la huella).
   // Con pin=null se quita.
-  app.put('/:id/pin', admin, async (req, reply) => {
+  app.put('/:id/pin', {
+    ...admin,
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          pin: { type: ['string', 'null'], pattern: '^[0-9]{4,6}$' },
+        }
+      }
+    }
+  }, async (req, reply) => {
     const { pin } = req.body
     try {
       const { rows } = await query(
@@ -474,7 +557,17 @@ export default async function clientesRoutes(app) {
   // Registra la entrega del certificado médico físico. El vencimiento se
   // calcula solo (un año desde la entrega) — no se tipea a mano. Con
   // fecha_entrega=null se limpia (por si se cargó por error).
-  app.put('/:id/apto-medico', admin, async (req, reply) => {
+  app.put('/:id/apto-medico', {
+    ...admin,
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          fecha_entrega: { type: ['string', 'null'], format: 'date' },
+        }
+      }
+    }
+  }, async (req, reply) => {
     const { fecha_entrega } = req.body
     const { rows } = await query(
       `UPDATE clientes SET
@@ -489,7 +582,7 @@ export default async function clientesRoutes(app) {
   })
 
   // PUT /api/admin/clientes/:id/ficha-medica (upsert)
-  app.put('/:id/ficha-medica', admin, async (req, reply) => {
+  app.put('/:id/ficha-medica', { ...admin, schema: { body: fichaMedicaSchema } }, async (req, reply) => {
     const f = req.body
     await query(
       `INSERT INTO ficha_medica (
@@ -547,7 +640,17 @@ export default async function clientesRoutes(app) {
   })
 
   // POST /api/admin/clientes/:id/inscripciones
-  app.post('/:id/inscripciones', admin, async (req, reply) => {
+  app.post('/:id/inscripciones', {
+    ...admin,
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          inscripciones: { type: 'array' },
+        }
+      }
+    }
+  }, async (req, reply) => {
     const { inscripciones } = req.body
     if (!inscripciones?.length) return reply.code(400).send({ error: 'Sin inscripciones' })
 
@@ -570,13 +673,23 @@ export default async function clientesRoutes(app) {
   // POST /api/admin/clientes/:id/inscripciones/:idInscripcion/renovar
   // Registra el cobro de un nuevo período (mes) sobre una inscripción existente:
   // crea una fila nueva en suscripciones y, si se pagó, su Ingreso en movimientos.
-  app.post('/:id/inscripciones/:idInscripcion/renovar', admin, async (req, reply) => {
+  app.post('/:id/inscripciones/:idInscripcion/renovar', {
+    ...admin,
+    schema: {
+      body: {
+        type: 'object',
+        required: ['cantidad_dias'],
+        properties: {
+          cantidad_dias: { type: 'integer', minimum: 1 },
+          tipo_pago: { type: 'string', enum: TIPOS_PAGO },
+          pago: { type: 'boolean' },
+          con_profesor: { type: ['boolean', 'null'] },
+        }
+      }
+    }
+  }, async (req, reply) => {
     const { id, idInscripcion } = req.params
     const { cantidad_dias, tipo_pago, pago, con_profesor } = req.body
-
-    if (!cantidad_dias || cantidad_dias < 1) {
-      return reply.code(400).send({ error: 'cantidad_dias es requerido' })
-    }
 
     const client = await pool.connect()
     try {

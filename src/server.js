@@ -20,6 +20,7 @@ import medicoRoutes from './routes/medico.js'
 import nutricionRoutes from './routes/nutricion.js'
 import initSueldos from '../scripts/init_sueldos.js'
 import profesorRoutes from './routes/profesor.js'
+import { iniciarJobContratosVencidos } from './jobs/contratosVencidos.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = Fastify({ logger: true })
@@ -52,12 +53,33 @@ await app.register(fastifyJwt, {
 // Auth hooks
 registerAuthHooks(app)
 
+// Error handler global — evita que un error no capturado (falla de DB, bug,
+// etc.) devuelva su mensaje crudo al cliente. Los errores "esperados" siguen
+// llegando tal cual: validación de schema (Fastify/AJV) y cualquier error con
+// statusCode < 500 explícito (ej. ContratoError en services/contratos.js)
+// traen un mensaje pensado para mostrarse. Todo lo demás se loguea completo
+// acá y al cliente solo le llega un mensaje genérico.
+app.setErrorHandler((error, request, reply) => {
+  if (error.validation) {
+    return reply.code(400).send({ error: error.message })
+  }
+  if (error.statusCode && error.statusCode < 500) {
+    return reply.code(error.statusCode).send({ error: error.message })
+  }
+  request.log.error(error)
+  reply.code(500).send({ error: 'Error interno del servidor' })
+})
+
 // Inicializar sistema de sueldos (crear tablas si no existen)
 try {
   await initSueldos()
 } catch (err) {
   console.warn('⚠️  Advertencia al inicializar sueldos:', err.message)
 }
+
+// Job diario: pasa a "vencido" los contratos de profesor cuyo plazo ya
+// expiró (corre al arrancar y luego cada 24h).
+iniciarJobContratosVencidos()
 
 // Rutas
 app.register(authRoutes,      { prefix: '/api/auth' })

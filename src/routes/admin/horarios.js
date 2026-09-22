@@ -86,7 +86,21 @@ export default async function horariosRoutes(app) {
   );
 
   // PUT /api/admin/horarios/:id
-  app.put("/:id", gestionar, async (req, reply) => {
+  app.put("/:id", {
+    ...gestionar,
+    schema: {
+      body: {
+        type: "object",
+        properties: {
+          dia: { type: "string", enum: DIAS },
+          hora: { type: "string" },
+          cupo_maximo: { type: "integer", minimum: 1 },
+          cupo_actual: { type: "integer", minimum: 0 },
+          id_profesor: { type: ["integer", "null"] },
+        },
+      },
+    },
+  }, async (req, reply) => {
     const { dia, hora, cupo_maximo, cupo_actual, id_profesor } = req.body;
     const { rows } = await query(
       `UPDATE horarios SET
@@ -119,11 +133,19 @@ export default async function horariosRoutes(app) {
   });
 
   // PUT /api/admin/horarios/:id/coprofesores — reemplaza el conjunto completo
-  app.put("/:id/coprofesores", gestionar, async (req, reply) => {
+  app.put("/:id/coprofesores", {
+    ...gestionar,
+    schema: {
+      body: {
+        type: "object",
+        required: ["id_profesores"],
+        properties: {
+          id_profesores: { type: "array", items: { type: "integer" } },
+        },
+      },
+    },
+  }, async (req, reply) => {
     const { id_profesores } = req.body;
-    if (!Array.isArray(id_profesores)) {
-      return reply.code(400).send({ error: "id_profesores debe ser un array" });
-    }
 
     const { rows: [horario] } = await query(
       `SELECT id_profesor FROM horarios WHERE id_horario = $1`,

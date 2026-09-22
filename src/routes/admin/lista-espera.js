@@ -113,9 +113,19 @@ export default async function listaEsperaRoutes(app) {
   })
 
   // PATCH /api/admin/lista-espera/:id/prioridad
-  app.patch('/:id/prioridad', gestionar, async (req, reply) => {
+  app.patch('/:id/prioridad', {
+    ...gestionar,
+    schema: {
+      body: {
+        type: 'object',
+        required: ['prioridad'],
+        properties: {
+          prioridad: { type: 'integer', minimum: 0 },
+        }
+      }
+    }
+  }, async (req, reply) => {
     const { prioridad } = req.body
-    if (prioridad === undefined) return reply.code(400).send({ error: 'prioridad es requerida' })
 
     const {
       rows: [row],

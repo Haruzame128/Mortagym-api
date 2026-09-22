@@ -250,131 +250,119 @@ export default async function sueldosRoutes(app) {
 
   // GET /api/admin/sueldos?desde=YYYY-MM-DD&hasta=YYYY-MM-DD — Calcula sueldos del período
   app.get('/', admin, async (req, reply) => {
-    try {
-      const { desde, hasta } = req.query
-      const rango = validarRango(desde, hasta)
-      if (rango.error) return reply.code(400).send({ error: rango.error })
-      const { fechaInicio, fechaFinExcl } = rango
+    const { desde, hasta } = req.query
+    const rango = validarRango(desde, hasta)
+    if (rango.error) return reply.code(400).send({ error: rango.error })
+    const { fechaInicio, fechaFinExcl } = rango
 
-      const profesores = await contratoDelRango(fechaInicio, fechaFinExcl)
+    const profesores = await contratoDelRango(fechaInicio, fechaFinExcl)
 
-      const sueldos = await Promise.all(
-        profesores.map(async (prof) => {
-          const condiciones = await condicionesDe(prof.id_contrato)
+    const sueldos = await Promise.all(
+      profesores.map(async (prof) => {
+        const condiciones = await condicionesDe(prof.id_contrato)
 
-          let monto = 0
-          let clientes_pagos = 0
-          for (const cond of condiciones) {
-            const r = await calcularCondicion(prof.id_profesor, cond, fechaInicio, fechaFinExcl)
-            monto += r.monto
-            clientes_pagos += r.clientes
-          }
+        let monto = 0
+        let clientes_pagos = 0
+        for (const cond of condiciones) {
+          const r = await calcularCondicion(prof.id_profesor, cond, fechaInicio, fechaFinExcl)
+          monto += r.monto
+          clientes_pagos += r.clientes
+        }
 
-          const { rows: pagado } = await query(`
-            SELECT id_sueldo FROM sueldos_pagados
-            WHERE id_profesor = $1 AND fecha_desde <= $3 AND fecha_hasta >= $2
-            LIMIT 1
-          `, [prof.id_profesor, desde, hasta])
+        const { rows: pagado } = await query(`
+          SELECT id_sueldo FROM sueldos_pagados
+          WHERE id_profesor = $1 AND fecha_desde <= $3 AND fecha_hasta >= $2
+          LIMIT 1
+        `, [prof.id_profesor, desde, hasta])
 
-          return {
-            profesor_id: prof.id_profesor,
-            profesor_nombre: prof.nomap_p,
-            condiciones: condiciones.map(c => ({ disciplina: c.disciplina, modalidad: c.modalidad, valor: c.valor })),
-            clientes_pagos,
-            monto: parseFloat(monto.toFixed(2)),
-            estado: pagado.length > 0 ? 'Pagado' : 'Pendiente',
-          }
-        }),
-      )
+        return {
+          profesor_id: prof.id_profesor,
+          profesor_nombre: prof.nomap_p,
+          condiciones: condiciones.map(c => ({ disciplina: c.disciplina, modalidad: c.modalidad, valor: c.valor })),
+          clientes_pagos,
+          monto: parseFloat(monto.toFixed(2)),
+          estado: pagado.length > 0 ? 'Pagado' : 'Pendiente',
+        }
+      }),
+    )
 
-      return sueldos
-    } catch (err) {
-      reply.code(500).send({ error: err.message })
-    }
+    return sueldos
   })
 
   // GET /api/admin/sueldos/historial — Historial de pagos
-  app.get('/historial', admin, async (req, reply) => {
-    try {
-      const { rows } = await query(`
-        SELECT
-          sp.id_sueldo, sp.id_profesor, p.nomap_p AS profesor_nombre,
-          sp.mes, sp.fecha_desde, sp.fecha_hasta, sp.monto, sp.medio_pago, sp.numero_comprobante,
-          sp.observaciones, sp.fecha_pago, sp.creado_en
-        FROM sueldos_pagados sp
-        JOIN profesores p ON p.id_profesor = sp.id_profesor
-        ORDER BY sp.fecha_pago DESC, sp.creado_en DESC
-      `)
-      return rows
-    } catch (err) {
-      reply.code(500).send({ error: err.message })
-    }
+  app.get('/historial', admin, async () => {
+    const { rows } = await query(`
+      SELECT
+        sp.id_sueldo, sp.id_profesor, p.nomap_p AS profesor_nombre,
+        sp.mes, sp.fecha_desde, sp.fecha_hasta, sp.monto, sp.medio_pago, sp.numero_comprobante,
+        sp.observaciones, sp.fecha_pago, sp.creado_en
+      FROM sueldos_pagados sp
+      JOIN profesores p ON p.id_profesor = sp.id_profesor
+      ORDER BY sp.fecha_pago DESC, sp.creado_en DESC
+    `)
+    return rows
   })
 
   // GET /api/admin/sueldos/profesor/:id?desde=YYYY-MM-DD&hasta=YYYY-MM-DD — Detalle de cálculo
   app.get('/profesor/:id', admin, async (req, reply) => {
-    try {
-      const { id } = req.params
-      const { desde, hasta } = req.query
-      const rango = validarRango(desde, hasta)
-      if (rango.error) return reply.code(400).send({ error: rango.error })
-      const { fechaInicio, fechaFinExcl } = rango
+    const { id } = req.params
+    const { desde, hasta } = req.query
+    const rango = validarRango(desde, hasta)
+    if (rango.error) return reply.code(400).send({ error: rango.error })
+    const { fechaInicio, fechaFinExcl } = rango
 
-      const { rows: [profesor] } = await query(`
-        SELECT id_profesor, nomap_p FROM profesores WHERE id_profesor = $1
-      `, [id])
-      if (!profesor) return reply.code(404).send({ error: 'Profesor no encontrado' })
+    const { rows: [profesor] } = await query(`
+      SELECT id_profesor, nomap_p FROM profesores WHERE id_profesor = $1
+    `, [id])
+    if (!profesor) return reply.code(404).send({ error: 'Profesor no encontrado' })
 
-      const { rows: [contratoDelRangoRow] } = await query(`
-        SELECT id_contrato, fecha_alta, fecha_vencimiento, estado
-        FROM contratos_profesor
-        WHERE id_profesor = $1 AND fecha_alta < $3
-          AND (fecha_baja IS NULL OR fecha_baja >= $2)
-        ORDER BY fecha_alta DESC
-        LIMIT 1
-      `, [id, fechaInicio, fechaFinExcl])
+    const { rows: [contratoDelRangoRow] } = await query(`
+      SELECT id_contrato, fecha_alta, fecha_vencimiento, estado
+      FROM contratos_profesor
+      WHERE id_profesor = $1 AND fecha_alta < $3
+        AND (fecha_baja IS NULL OR fecha_baja >= $2)
+      ORDER BY fecha_alta DESC
+      LIMIT 1
+    `, [id, fechaInicio, fechaFinExcl])
 
-      if (!contratoDelRangoRow) {
-        return reply.code(404).send({ error: 'El profesor no tenía contrato vigente en ese período' })
-      }
+    if (!contratoDelRangoRow) {
+      return reply.code(404).send({ error: 'El profesor no tenía contrato vigente en ese período' })
+    }
 
-      const condiciones = await condicionesDe(contratoDelRangoRow.id_contrato)
+    const condiciones = await condicionesDe(contratoDelRangoRow.id_contrato)
 
-      const condicionesConMonto = await Promise.all(condiciones.map(async (cond) => {
-        const r = await calcularCondicion(id, cond, fechaInicio, fechaFinExcl)
-        return {
-          id_disciplina: cond.id_disciplina,
-          disciplina: cond.disciplina,
-          modalidad: cond.modalidad,
-          valor: cond.valor,
-          monto: parseFloat(r.monto.toFixed(2)),
-          clientes: r.clientes,
-          horas: r.horas,
-          detalle: r.detalle,
-        }
-      }))
-
-      const monto_final = condicionesConMonto.reduce((sum, c) => sum + c.monto, 0)
-      const clientes_pagos = condicionesConMonto.reduce((sum, c) => sum + c.clientes, 0)
-
-      const { rows: pagado } = await query(`
-        SELECT id_sueldo FROM sueldos_pagados
-        WHERE id_profesor = $1 AND fecha_desde <= $3 AND fecha_hasta >= $2
-      `, [id, desde, hasta])
-
+    const condicionesConMonto = await Promise.all(condiciones.map(async (cond) => {
+      const r = await calcularCondicion(id, cond, fechaInicio, fechaFinExcl)
       return {
-        profesor_id: profesor.id_profesor,
-        profesor_nombre: profesor.nomap_p,
-        desde,
-        hasta,
-        contrato: contratoDelRangoRow,
-        condiciones: condicionesConMonto,
-        clientes_pagos,
-        monto_final: parseFloat(monto_final.toFixed(2)),
-        estado: pagado.length > 0 ? 'Pagado' : 'Pendiente',
+        id_disciplina: cond.id_disciplina,
+        disciplina: cond.disciplina,
+        modalidad: cond.modalidad,
+        valor: cond.valor,
+        monto: parseFloat(r.monto.toFixed(2)),
+        clientes: r.clientes,
+        horas: r.horas,
+        detalle: r.detalle,
       }
-    } catch (err) {
-      reply.code(500).send({ error: err.message })
+    }))
+
+    const monto_final = condicionesConMonto.reduce((sum, c) => sum + c.monto, 0)
+    const clientes_pagos = condicionesConMonto.reduce((sum, c) => sum + c.clientes, 0)
+
+    const { rows: pagado } = await query(`
+      SELECT id_sueldo FROM sueldos_pagados
+      WHERE id_profesor = $1 AND fecha_desde <= $3 AND fecha_hasta >= $2
+    `, [id, desde, hasta])
+
+    return {
+      profesor_id: profesor.id_profesor,
+      profesor_nombre: profesor.nomap_p,
+      desde,
+      hasta,
+      contrato: contratoDelRangoRow,
+      condiciones: condicionesConMonto,
+      clientes_pagos,
+      monto_final: parseFloat(monto_final.toFixed(2)),
+      estado: pagado.length > 0 ? 'Pagado' : 'Pendiente',
     }
   })
 
@@ -406,97 +394,93 @@ export default async function sueldosRoutes(app) {
 
   // POST /api/admin/sueldos/pago — Registrar pago de sueldo
   app.post('/pago', admin, async (req, reply) => {
-    try {
-      const {
-        profesor_id, profesor_nombre, desde, hasta, monto,
-        medio_pago, numero_comprobante, observaciones, fecha, detalle,
-      } = req.body
+    const {
+      profesor_id, profesor_nombre, desde, hasta, monto,
+      medio_pago, numero_comprobante, observaciones, fecha, detalle,
+    } = req.body
 
-      if (!profesor_id || !desde || !hasta || !monto || !medio_pago) {
-        return reply.code(400).send({
-          error: 'Faltan campos requeridos: profesor_id, desde, hasta, monto, medio_pago',
+    if (!profesor_id || !desde || !hasta || !monto || !medio_pago) {
+      return reply.code(400).send({
+        error: 'Faltan campos requeridos: profesor_id, desde, hasta, monto, medio_pago',
+      })
+    }
+    if (!FECHA_RE.test(desde) || !FECHA_RE.test(hasta)) {
+      return reply.code(400).send({ error: 'desde y hasta deben estar en formato YYYY-MM-DD' })
+    }
+    if (monto <= 0) {
+      return reply.code(400).send({ error: 'El monto debe ser mayor a 0' })
+    }
+
+    // Sin columna propia para guardar el detalle del cálculo, lo dejamos
+    // en observaciones (si el usuario no cargó una propia) para que el
+    // número siga siendo reproducible aunque después se anule un movimiento.
+    const observacionesFinal = observaciones
+      || (detalle ? `Detalle del cálculo: ${JSON.stringify(detalle)}` : null)
+
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+
+      // Un período ya pagado que se superponga con el nuevo bloquea el alta
+      // (evita pagar dos veces el mismo tramo, pero permite tramos distintos
+      // del mismo profesor, ej. primera y segunda quincena por separado).
+      const { rows: existing } = await client.query(`
+        SELECT id_sueldo FROM sueldos_pagados
+        WHERE id_profesor = $1 AND fecha_desde <= $3 AND fecha_hasta >= $2
+      `, [profesor_id, desde, hasta])
+
+      if (existing.length > 0) {
+        await client.query('ROLLBACK')
+        return reply.code(409).send({
+          error: 'Ya existe un pago registrado para este profesor que se superpone con ese período',
         })
       }
-      if (!FECHA_RE.test(desde) || !FECHA_RE.test(hasta)) {
-        return reply.code(400).send({ error: 'desde y hasta deben estar en formato YYYY-MM-DD' })
-      }
-      if (monto <= 0) {
-        return reply.code(400).send({ error: 'El monto debe ser mayor a 0' })
-      }
 
-      // Sin columna propia para guardar el detalle del cálculo, lo dejamos
-      // en observaciones (si el usuario no cargó una propia) para que el
-      // número siga siendo reproducible aunque después se anule un movimiento.
-      const observacionesFinal = observaciones
-        || (detalle ? `Detalle del cálculo: ${JSON.stringify(detalle)}` : null)
+      const { rows: [sueldo] } = await client.query(`
+        INSERT INTO sueldos_pagados (
+          id_profesor, fecha_desde, fecha_hasta, monto, medio_pago,
+          numero_comprobante, observaciones, fecha_pago
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING id_sueldo, id_profesor, fecha_desde, fecha_hasta, monto, medio_pago,
+                  numero_comprobante, observaciones, fecha_pago, creado_en
+      `, [
+        profesor_id, desde, hasta, monto, medio_pago,
+        numero_comprobante || null, observacionesFinal,
+        fecha || new Date().toISOString().split('T')[0],
+      ])
 
-      const client = await pool.connect()
-      try {
-        await client.query('BEGIN')
+      const { rows: [categoria] } = await client.query(`
+        SELECT id_categoria FROM categorias_movimiento WHERE nombre_cm = 'Sueldo' LIMIT 1
+      `)
 
-        // Un período ya pagado que se superponga con el nuevo bloquea el alta
-        // (evita pagar dos veces el mismo tramo, pero permite tramos distintos
-        // del mismo profesor, ej. primera y segunda quincena por separado).
-        const { rows: existing } = await client.query(`
-          SELECT id_sueldo FROM sueldos_pagados
-          WHERE id_profesor = $1 AND fecha_desde <= $3 AND fecha_hasta >= $2
-        `, [profesor_id, desde, hasta])
-
-        if (existing.length > 0) {
-          await client.query('ROLLBACK')
-          return reply.code(409).send({
-            error: 'Ya existe un pago registrado para este profesor que se superpone con ese período',
-          })
-        }
-
-        const { rows: [sueldo] } = await client.query(`
-          INSERT INTO sueldos_pagados (
-            id_profesor, fecha_desde, fecha_hasta, monto, medio_pago,
-            numero_comprobante, observaciones, fecha_pago
+      if (categoria) {
+        await client.query(`
+          INSERT INTO movimientos (
+            id_categoria, id_usuario, tipo_m, monto_m,
+            descripcion_m, medio_pago_m, fecha_m, origen_m
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-          RETURNING id_sueldo, id_profesor, fecha_desde, fecha_hasta, monto, medio_pago,
-                    numero_comprobante, observaciones, fecha_pago, creado_en
+          VALUES ($1, $2, 'Egreso', $3, $4, $5, $6, 'Automatico')
         `, [
-          profesor_id, desde, hasta, monto, medio_pago,
-          numero_comprobante || null, observacionesFinal,
+          categoria.id_categoria, req.user.id, monto,
+          `Sueldo ${profesor_nombre} - ${desde} a ${hasta}`, medio_pago,
           fecha || new Date().toISOString().split('T')[0],
         ])
-
-        const { rows: [categoria] } = await client.query(`
-          SELECT id_categoria FROM categorias_movimiento WHERE nombre_cm = 'Sueldo' LIMIT 1
-        `)
-
-        if (categoria) {
-          await client.query(`
-            INSERT INTO movimientos (
-              id_categoria, id_usuario, tipo_m, monto_m,
-              descripcion_m, medio_pago_m, fecha_m, origen_m
-            )
-            VALUES ($1, $2, 'Egreso', $3, $4, $5, $6, 'Automatico')
-          `, [
-            categoria.id_categoria, req.user.id, monto,
-            `Sueldo ${profesor_nombre} - ${desde} a ${hasta}`, medio_pago,
-            fecha || new Date().toISOString().split('T')[0],
-          ])
-        }
-
-        await client.query('COMMIT')
-
-        return reply.code(201).send({
-          id: sueldo.id_sueldo,
-          success: true,
-          message: 'Sueldo registrado correctamente',
-          ...sueldo,
-        })
-      } catch (e) {
-        await client.query('ROLLBACK')
-        throw e
-      } finally {
-        client.release()
       }
-    } catch (err) {
-      reply.code(500).send({ error: err.message })
+
+      await client.query('COMMIT')
+
+      return reply.code(201).send({
+        id: sueldo.id_sueldo,
+        success: true,
+        message: 'Sueldo registrado correctamente',
+        ...sueldo,
+      })
+    } catch (e) {
+      await client.query('ROLLBACK')
+      throw e
+    } finally {
+      client.release()
     }
   })
 }

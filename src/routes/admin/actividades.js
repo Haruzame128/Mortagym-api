@@ -74,7 +74,21 @@ export default async function actividadesRoutes(app) {
   );
 
   // PUT /api/admin/actividades/:id
-  app.put("/:id", gestionar, async (req, reply) => {
+  app.put("/:id", {
+    ...gestionar,
+    schema: {
+      body: {
+        type: "object",
+        properties: {
+          nombre:           { type: "string" },
+          descripcion:      { type: "string" },
+          max_inasistencia: { type: "integer", minimum: 0 },
+          activo:           { type: "boolean" },
+          tipo_a:           { type: "string", enum: ["fijo", "variable"] },
+        },
+      },
+    },
+  }, async (req, reply) => {
     const { nombre, descripcion, max_inasistencia, activo, tipo_a } = req.body;
     const { rows } = await query(
       `UPDATE actividades SET
@@ -105,8 +119,20 @@ export default async function actividadesRoutes(app) {
   });
 
   // DELETE /api/admin/actividades/:id
+  // Si la actividad tiene inscripciones/horarios asociados (FK RESTRICT), no
+  // se puede borrar sin perder ese historial — se desactiva en su lugar.
   app.delete("/:id", gestionar, async (req, reply) => {
-    await query("DELETE FROM actividades WHERE id_actividad = $1", [req.params.id]);
-    return { message: "Actividad eliminada" };
+    try {
+      await query("DELETE FROM actividades WHERE id_actividad = $1", [req.params.id]);
+      return { message: "Actividad eliminada", eliminado: true };
+    } catch (err) {
+      if (err.code !== "23503") throw err;
+      await query("UPDATE actividades SET activo_a = false WHERE id_actividad = $1", [req.params.id]);
+      return {
+        message: "La actividad tiene inscripciones u horarios asociados: se desactivó en vez de eliminarse",
+        eliminado: false,
+        desactivado: true,
+      };
+    }
   });
 }

@@ -56,9 +56,20 @@ export default async function contratosRoutes(app) {
   })
 
   // POST /api/admin/contratos/:id/rescindir — baja manual
-  app.post('/:id/rescindir', admin, async (req, reply) => {
+  app.post('/:id/rescindir', {
+    ...admin,
+    schema: {
+      body: {
+        type: 'object',
+        required: ['motivo'],
+        properties: {
+          motivo: { type: 'string', minLength: 1 },
+          fecha_baja: { type: 'string', format: 'date' },
+        }
+      }
+    }
+  }, async (req, reply) => {
     const { motivo, fecha_baja } = req.body
-    if (!motivo) return reply.code(400).send({ error: 'motivo es requerido' })
 
     const { rows: [contrato] } = await query(
       `SELECT id_profesor FROM contratos_profesor WHERE id_contrato = $1`,
